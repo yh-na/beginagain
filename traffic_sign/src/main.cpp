@@ -8,7 +8,7 @@
 #include <cv_bridge/cv_bridge.h>
 #include <traffic_sign/SlideWindow.h>
 
-using namespace std;
+
 using namespace cv;
 
 Mat _inRange(Mat input, int min, int max)
@@ -66,7 +66,7 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
 
     ///////read image
-    std::string imageName = "image1.png";
+    char* imageName = "/home/user/catkin_ws/src/traffic_sign/image.png";
     Mat readImg;
     readImg = imread( imageName, 1 );
     //Mat readGrayImg;
@@ -85,8 +85,10 @@ int main(int argc, char **argv)
     blur( readBlueImg, readBlueImg, Size(3,3) );
     blur( readYellowImg, readYellowImg, Size(3,3) );
 
+
+
     ///////read sample1
-    std::string imageName1 = "sample1_bin.jpg";
+    char* imageName1 = "/home/user/catkin_ws/src/traffic_sign/sample1_bin.jpg";
     Mat readSampleImg1;
     readSampleImg1 = imread( imageName1, 1 );
     cvtColor( readSampleImg1, readSampleImg1, CV_BGR2GRAY );
@@ -95,7 +97,7 @@ int main(int argc, char **argv)
     cv::putText( readImg, "Parking", _sampleMatching(readImg, readBlueImg, readSampleImg1), 2, 1, Scalar::all(0) );
 
     ///////read sample2
-    std::string imageName2 = "sample2_bin.jpg";
+    char* imageName2 = "/home/user/catkin_ws/src/traffic_sign/sample2_bin.jpg";
     Mat readSampleImg2;
     readSampleImg2 = imread( imageName2, 1 );
     cvtColor( readSampleImg2, readSampleImg2, CV_BGR2GRAY );
@@ -103,7 +105,7 @@ int main(int argc, char **argv)
     cv::putText( readImg, "Train", _sampleMatching(readImg, readYellowImg, readSampleImg2), 2, 1, Scalar::all(0) );
 
     ///////read sample3
-    std::string imageName3 = "sample3_bin.jpg";
+    char* imageName3 = "/home/user/catkin_ws/src/traffic_sign/sample3_bin.jpg";
     Mat readSampleImg3;
     readSampleImg3 = imread( imageName3, 1 );
     cvtColor( readSampleImg3, readSampleImg3, CV_BGR2GRAY );
@@ -114,8 +116,9 @@ int main(int argc, char **argv)
     /// Create the result matrix
 
     imshow( "result_window", readImg );
-    imshow( "result_ye", readYellowImg );
-    imshow( "result_bl", readBlueImg );
+    //imshow( "result_ye", readYellowImg );
+    //imshow( "result_bl", readBlueImg );
+
 
     waitKey(0);
 
