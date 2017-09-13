@@ -1,7 +1,0 @@
-<launch>
-
-	<include file="$(find burgerking_path_generator)/launch/path_generator.launch"/>
-	<include file="$(find burgerking_robot_drive)/launch/robot_drive.launch"/>
-	<include file="$(find turtlebot3_slam)/launch/turtlebot3_slam.launch"/>
-
-</launch>
