@@ -1,4 +1,4 @@
-float32 nodeX
-float32 nodeY
+burgerking_path_generator/node[] nodeVector
+
 
 

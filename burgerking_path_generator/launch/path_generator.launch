@@ -1,0 +1,4 @@
+<launch>
+  <node pkg="burgerking_path_generator" type="path_generator" name="path_generator"  output="screen">
+	</node>
+</launch>

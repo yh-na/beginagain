@@ -5,15 +5,9 @@
 #include "nav_msgs/OccupancyGrid.h"
 #include "nav_msgs/MapMetaData.h"
 #include "tf/transform_listener.h"
-#include "std_msgs/Header.h"
-#include "burgerking_path_generator/pathpair.h"
-
-#include <fstream>
-#include <string>
-#include <math.h>
-
 
 #define pi 3.141592
+#define Length(a,b) (sqrt((a*a)+(b*b)))
 
 enum occupancyValue{
     unknown = 0,
@@ -76,6 +70,9 @@ public:
     nav_msgs::MapMetaData info;
     std::vector<std::vector<int> > gridmap;
 
+    int rows;
+    int cols;
+
     tf::TransformListener listener;   
     tf::StampedTransform transform;
 
@@ -89,8 +86,13 @@ public:
     int Nd_rows;
     int Nd_cols;
 
+    int PathParam;
+
     std::vector<std::pair<int, int> > goal_Candidate;
 
+
+    bool EntranceFlag;
+    std::pair<int, int> EntranceCell;
     Node StartNode;
     Node GoalNode;
 
@@ -108,6 +110,7 @@ public:
 
     ros::NodeHandle handle;
     ros::Publisher path_pub;
+    
 
 };
 

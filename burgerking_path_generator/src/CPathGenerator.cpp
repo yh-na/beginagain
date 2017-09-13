@@ -1,7 +1,16 @@
 #include "CPathGenerator.h"
-#include <opencv2/opencv.hpp>
+#include "nav_msgs/OccupancyGrid.h"
+#include "nav_msgs/MapMetaData.h"
+#include "tf/transform_listener.h"
+#include "std_msgs/Header.h"
+#include "burgerking_path_generator/path.h"
 
-CPathGenerator::CPathGenerator() : Nd_rows(5), Nd_cols(5)
+#include <opencv2/opencv.hpp>
+#include <fstream>
+#include <string>
+#include <math.h>
+
+CPathGenerator::CPathGenerator() : Nd_rows(5), Nd_cols(5), EntranceFlag(true),PathParam(1)
 {
 }
 
@@ -21,8 +30,8 @@ void CPathGenerator::mapCallback(const nav_msgs::OccupancyGrid::ConstPtr &msg)
 {
     // gridmap update //
     info = msg->info;
-    int rows = info.height;
-    int cols = info.width;
+    rows = info.height;
+    cols = info.width;
 
     gridmap.resize(rows);
     for (int i = 0; i < rows; i++)
@@ -54,6 +63,9 @@ void CPathGenerator::mapCallback(const nav_msgs::OccupancyGrid::ConstPtr &msg)
 
     pathGenerate();
 
+    sendPathmsg();
+
+
     for (int p = 0; p < PathNode.size(); p++)
     {
         gridmap[PathNode[p].first][PathNode[p].second] = 7;
@@ -74,7 +86,6 @@ void CPathGenerator::mapCallback(const nav_msgs::OccupancyGrid::ConstPtr &msg)
     // outfile.close();
     // num++;
 
-    // sendPathmsg();
 
     cv::Size grid_size = cv::Size(cols, rows);
     cv::Mat grid_image = cv::Mat::zeros(grid_size, CV_8UC3);
@@ -98,9 +109,13 @@ void CPathGenerator::mapCallback(const nav_msgs::OccupancyGrid::ConstPtr &msg)
         }
     }
 
+    cv::transpose(grid_image, grid_image);
+    cv::flip(grid_image, grid_image, -1);
     cv::pyrUp(grid_image, grid_image);
     cv::imshow("grid_image", grid_image);
     cv::waitKey(1);
+
+
 }
 
 
@@ -112,33 +127,87 @@ void CPathGenerator::getRobotState()
 
     robotPos_x = transform.getOrigin().x();
     robotPos_y = transform.getOrigin().y();
-    //ROS_INFO("x = %f, y = %f", robotPos_x, robotPos_y);
+    ROS_INFO("x = %f, y = %f", robotPos_x, robotPos_y);
 
     // robot orientation
-    robot_angle = tf::getYaw(transform.getRotation());
+    //robot_angle = tf::getYaw(transform.getRotation());
     //ROS_INFO("angle = %f", robot_angle);
 
+    
     // [pixel]
-    robotGrid_x = floor(0.5 + (robotPos_x - info.origin.position.x) / info.resolution);
-    robotGrid_y = floor(0.5 + (robotPos_y - info.origin.position.y) / info.resolution);
+    robotGrid_x = floor((robotPos_x*20.0)+0.5);
+    robotGrid_y = floor((robotPos_y*20.0)+0.5);
 
-    // ROS_INFO("info.resolution = %f\n",info.resolution);
-    // ROS_INFO("info.origin.position.x = %f\n",info.origin.position.x);
-    ROS_INFO("cell_x = %d, cell_y = %d", robotGrid_x, robotGrid_y);
+
+    int tmp = robotGrid_x;
+    robotGrid_x = robotGrid_y;
+    robotGrid_y = tmp;
+
+
+    int moveValue = floor(0.5+(0+5)/0.05);
+    robotGrid_x += moveValue;
+    robotGrid_y += moveValue;
+
+    ROS_INFO("robotGrid_x = %d, robotGrid_y = %d", robotGrid_x, robotGrid_y);
+
+    if(EntranceFlag){
+
+        EntranceCell.first = robotGrid_x;
+        EntranceCell.second = robotGrid_y;
+
+        EntranceFlag = false;
+    }
+
+
 }
 
 
 
 void CPathGenerator::searchGoal()
 {
+    int goal_row = EntranceCell.first;
+    int goal_col = EntranceCell.second;
+    float distance_ = 0.0;
+    float distance = 0.0;
+
+    for(int i=EntranceCell.first; i<(EntranceCell.first+41); i++){
+        for(int j=EntranceCell.second; j<(EntranceCell.second+41); j++){
+            
+            if( gridmap[i][j] == empty )
+            {
+                float a = (i-EntranceCell.first)*0.05;
+                float b = (j-EntranceCell.second)*0.05;
+
+                distance = Length(a,b);
+
+                if(distance > distance_)
+                {
+                    goal_row = i;
+                    goal_col = j;
+
+                    distance_ = distance;
+                }
+            }
+        }
+    }
+
+
     goal_Candidate.clear();
 
     // search goal -- confirm order
-    goal_Candidate.push_back(std::make_pair(115, 132));
-    goal_Candidate.push_back(std::make_pair(115, 133));
-    goal_Candidate.push_back(std::make_pair(115, 134));
-    goal_Candidate.push_back(std::make_pair(115, 135));
-    goal_Candidate.push_back(std::make_pair(115, 136));
+    // goal_Candidate.push_back(std::make_pair(goal_row, goal_col-4));
+    // goal_Candidate.push_back(std::make_pair(goal_row, goal_col-3));
+    // goal_Candidate.push_back(std::make_pair(goal_row, goal_col-2));
+    // goal_Candidate.push_back(std::make_pair(goal_row, goal_col-1));
+    // goal_Candidate.push_back(std::make_pair(goal_row, goal_col));
+
+
+    goal_Candidate.push_back(std::make_pair(133, 132));
+    goal_Candidate.push_back(std::make_pair(133, 133));
+    goal_Candidate.push_back(std::make_pair(133, 134));
+    goal_Candidate.push_back(std::make_pair(133, 135));
+    goal_Candidate.push_back(std::make_pair(133, 136));
+
 
     GoalNode.H = 0;
     GoalNode.from = goal;
@@ -158,7 +227,7 @@ void CPathGenerator::searchGoal()
         for (int n = 0; n < Nd_cols; n++)
         {
 
-            GoalNode.nodeComponent[m][n].first = (goal_Candidate[m].first) - (Nd_rows - 1) + m;
+            GoalNode.nodeComponent[m][n].first = (goal_Candidate[m].first) - (Nd_rows - 3) + m;
             GoalNode.nodeComponent[m][n].second = goal_Candidate[n].second;
 
             //printf("(%d, %d)",GoalNode.nodeComponent[m][n].first,GoalNode.nodeComponent[m][n].second);
@@ -176,7 +245,7 @@ void CPathGenerator::pathGenerate()
 
     // 1. start node
     // robot position  & robot position is start node
-    StartNode.H = 0;
+    StartNode.H = 100000;
     StartNode.from = start;
 
     StartNode.nodeComponent.clear();
@@ -213,6 +282,55 @@ void CPathGenerator::pathGenerate()
     while (1)
     {
         // 4. search child node & put into open node
+
+        // (4) left
+        Node LeftNode;
+
+        LeftNode.from = right;
+
+        LeftNode.nodeComponent.clear();
+        LeftNode.nodeComponent.resize(Nd_rows);
+
+        for (int i = 0; i < Nd_rows; i++)
+        {
+            LeftNode.nodeComponent[i].resize(Nd_cols);
+        }
+
+        //printf("Left node\n");
+
+        for (int m = 0; m < Nd_rows; m++)
+        {
+            for (int n = 0; n < Nd_cols; n++)
+            {
+
+                LeftNode.nodeComponent[m][n].first = ParentNode.nodeComponent[m][n].first;
+                LeftNode.nodeComponent[m][n].second = ParentNode.nodeComponent[m][n].second - PathParam;
+
+                //printf("(%d, %d)",LeftNode.nodeComponent[m][n].first,LeftNode.nodeComponent[m][n].second);
+            }
+            //printf("\n");
+        }
+
+        LeftNode.H = H_function(LeftNode);
+
+        if (LeftNode.H == 0)
+        {
+            printf("Path found!\n");
+            PathNode.clear();
+            ClosedNode.push_back(LeftNode);
+            SetPathNode(LeftNode);
+            break;
+        }
+
+        if (NodeCapabilityCheck(LeftNode))
+        {
+            if (NewNodeCheck(LeftNode))
+            {
+                OpenNode.push_back(LeftNode);
+            }
+        }
+
+
         // (1) up
         Node UpNode;
 
@@ -233,7 +351,7 @@ void CPathGenerator::pathGenerate()
             for (int n = 0; n < Nd_cols; n++)
             {
 
-                UpNode.nodeComponent[m][n].first = ParentNode.nodeComponent[m][n].first - 1;
+                UpNode.nodeComponent[m][n].first = ParentNode.nodeComponent[m][n].first - PathParam;
                 UpNode.nodeComponent[m][n].second = ParentNode.nodeComponent[m][n].second;
 
                 //printf("(%d, %d)",UpNode.nodeComponent[m][n].first,UpNode.nodeComponent[m][n].second);
@@ -281,7 +399,7 @@ void CPathGenerator::pathGenerate()
             {
 
                 RightNode.nodeComponent[m][n].first = ParentNode.nodeComponent[m][n].first;
-                RightNode.nodeComponent[m][n].second = ParentNode.nodeComponent[m][n].second + 1;
+                RightNode.nodeComponent[m][n].second = ParentNode.nodeComponent[m][n].second + PathParam;
 
                 //printf("(%d, %d)",RightNode.nodeComponent[m][n].first,RightNode.nodeComponent[m][n].second);
             }
@@ -327,7 +445,7 @@ void CPathGenerator::pathGenerate()
             for (int n = 0; n < Nd_cols; n++)
             {
 
-                DownNode.nodeComponent[m][n].first = ParentNode.nodeComponent[m][n].first + 1;
+                DownNode.nodeComponent[m][n].first = ParentNode.nodeComponent[m][n].first + PathParam;
                 DownNode.nodeComponent[m][n].second = ParentNode.nodeComponent[m][n].second;
 
                 //printf("(%d, %d)",DownNode.nodeComponent[m][n].first,DownNode.nodeComponent[m][n].second);
@@ -354,52 +472,7 @@ void CPathGenerator::pathGenerate()
             }
         }
 
-        // (4) left
-        Node LeftNode;
 
-        LeftNode.from = right;
-
-        LeftNode.nodeComponent.clear();
-        LeftNode.nodeComponent.resize(Nd_rows);
-
-        for (int i = 0; i < Nd_rows; i++)
-        {
-            LeftNode.nodeComponent[i].resize(Nd_cols);
-        }
-
-        //printf("Left node\n");
-
-        for (int m = 0; m < Nd_rows; m++)
-        {
-            for (int n = 0; n < Nd_cols; n++)
-            {
-
-                LeftNode.nodeComponent[m][n].first = ParentNode.nodeComponent[m][n].first;
-                LeftNode.nodeComponent[m][n].second = ParentNode.nodeComponent[m][n].second - 1;
-
-                //printf("(%d, %d)",LeftNode.nodeComponent[m][n].first,LeftNode.nodeComponent[m][n].second);
-            }
-            //printf("\n");
-        }
-
-        LeftNode.H = H_function(LeftNode);
-
-        if (LeftNode.H == 0)
-        {
-            printf("Path found!\n");
-            PathNode.clear();
-            ClosedNode.push_back(LeftNode);
-            SetPathNode(LeftNode);
-            break;
-        }
-
-        if (NodeCapabilityCheck(LeftNode))
-        {
-            if (NewNodeCheck(LeftNode))
-            {
-                OpenNode.push_back(LeftNode);
-            }
-        }
 
 
 
@@ -548,7 +621,7 @@ void CPathGenerator::SetPathNode(Node nd)
     if(nd.from == up)
     {
         for(int i=0; i<ClosedNode.size(); i++){
-            if( ClosedNode[i].nodeComponent[Nd_rows/2][Nd_cols/2].first == nd.nodeComponent[Nd_rows/2][Nd_cols/2].first - 1 &&
+            if( ClosedNode[i].nodeComponent[Nd_rows/2][Nd_cols/2].first == nd.nodeComponent[Nd_rows/2][Nd_cols/2].first - PathParam &&
                 ClosedNode[i].nodeComponent[Nd_rows/2][Nd_cols/2].second == nd.nodeComponent[Nd_rows/2][Nd_cols/2].second)
                 {
                     SetPathNode(ClosedNode[i]);
@@ -560,7 +633,7 @@ void CPathGenerator::SetPathNode(Node nd)
     {
         for(int i=0; i<ClosedNode.size(); i++){
             if( ClosedNode[i].nodeComponent[Nd_rows/2][Nd_cols/2].first == nd.nodeComponent[Nd_rows/2][Nd_cols/2].first  &&
-                ClosedNode[i].nodeComponent[Nd_rows/2][Nd_cols/2].second == nd.nodeComponent[Nd_rows/2][Nd_cols/2].second + 1)
+                ClosedNode[i].nodeComponent[Nd_rows/2][Nd_cols/2].second == nd.nodeComponent[Nd_rows/2][Nd_cols/2].second + PathParam)
                 {
                     SetPathNode(ClosedNode[i]);
                     break;
@@ -570,7 +643,7 @@ void CPathGenerator::SetPathNode(Node nd)
     else if(nd.from == down)
     {
         for(int i=0; i<ClosedNode.size(); i++){
-            if( ClosedNode[i].nodeComponent[Nd_rows/2][Nd_cols/2].first == nd.nodeComponent[Nd_rows/2][Nd_cols/2].first + 1 &&
+            if( ClosedNode[i].nodeComponent[Nd_rows/2][Nd_cols/2].first == nd.nodeComponent[Nd_rows/2][Nd_cols/2].first + PathParam &&
                 ClosedNode[i].nodeComponent[Nd_rows/2][Nd_cols/2].second == nd.nodeComponent[Nd_rows/2][Nd_cols/2].second)
                 {
                     SetPathNode(ClosedNode[i]);
@@ -582,7 +655,7 @@ void CPathGenerator::SetPathNode(Node nd)
     {
         for(int i=0; i<ClosedNode.size(); i++){
             if( ClosedNode[i].nodeComponent[Nd_rows/2][Nd_cols/2].first == nd.nodeComponent[Nd_rows/2][Nd_cols/2].first  &&
-                ClosedNode[i].nodeComponent[Nd_rows/2][Nd_cols/2].second == nd.nodeComponent[Nd_rows/2][Nd_cols/2].second - 1)
+                ClosedNode[i].nodeComponent[Nd_rows/2][Nd_cols/2].second == nd.nodeComponent[Nd_rows/2][Nd_cols/2].second - PathParam)
                 {
                     SetPathNode(ClosedNode[i]);
                     break;
@@ -605,8 +678,11 @@ void CPathGenerator::TransformPathNode(std::vector<std::pair<int, int>> pNode)
 
     for (riter = pNode.rbegin(); riter != pNode.rend();)
     {
-        T_x = (riter->second - 100) * 0.05;
-        T_y = (riter->first - 100) * 0.05;
+        T_x = (riter->second)*0.05;
+        T_y = (riter->first)*0.05;
+
+        T_x = T_x - 5.0;
+        T_y = T_y - 5.0;
 
         T_PathNode.push_back(std::make_pair(T_x, T_y));
 
@@ -614,13 +690,22 @@ void CPathGenerator::TransformPathNode(std::vector<std::pair<int, int>> pNode)
     }
 }
 
+
+
 void CPathGenerator::sendPathmsg()
 {
-    path_pub = handle.advertise<burgerking_path_generator::pathpair>("path_msg", 100);
-    burgerking_path_generator::path pathmsg;
-    burgerking_path_generator::pathpair pathpairmsg;
+    path_pub = handle.advertise<burgerking_path_generator::path>("path_msg", 1);
+    burgerking_path_generator::node nodeMsg;
+    burgerking_path_generator::path pathMsg;
 
-    // pathpairmsg.PathVector = T_PathNode;
-    // path_pub.publish(pathmsg);
-    // ROS_INFO("send path\n");
+    for(int i=0; i<T_PathNode.size(); i++){
+
+        nodeMsg.nodeX = T_PathNode[i].first;
+        nodeMsg.nodeY = T_PathNode[i].second;
+
+        pathMsg.nodeVector.push_back(nodeMsg);
+    }
+
+    path_pub.publish(pathMsg);
+    ROS_INFO("send path ---- size:%d\n",(unsigned int)T_PathNode.size());
 }
